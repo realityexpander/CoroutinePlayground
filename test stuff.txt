@@ -1,0 +1,136 @@
+
+---------- in fetchData lambda
+// Regular exceptions only cancel the individual lambda. Further lambda calls in the job scope may occur.
+// Cancellation exceptions cancel the job scope so no further calls in the job scope will occur.
+
+// coroutineScope or supervisorScope
+// Regular Exception in fetchData (lambda)
+I/System.out: *** 1st job launch started...
+I/System.out: *** fetchData 1 started...
+I/System.out: *** fetchDataRethrowCancellation regular exception java.lang.Exception: fetchData 1 Exception
+I/System.out: *** fetchData 2 started...
+I/System.out: *** fetchData 2 finished
+I/System.out: *** 2nd job launch completed. null
+I/System.out: *** 1st job launch finished.
+I/System.out: *** 1st job launch completed. null
+// NOTE: "fetchData 2" runs to completion.
+
+// coroutineScope or supervisorScope
+// CancellationException in fetchData (lambda)
+I/System.out: *** 1st job launch started...
+I/System.out: *** fetchData 1 started...
+I/System.out: *** fetchDataRethrowCancellation CancellationException rethrown java.util.concurrent.CancellationException: fetchData 1 CancellationException
+I/System.out: *** 2nd job launch completed. java.util.concurrent.CancellationException: fetchData 1 CancellationException
+I/System.out: *** 1st job launch finished.
+I/System.out: *** 1st job launch completed. null
+// NOTE: "fetchData 2" is never started.
+
+------------- in Launch Scope:
+
+// Regular Exceptions are handled differently depending on:
+// coroutineScope - exception is propagated up to parent and entire scope is cancelled.
+// supervisorScope - exception uses exceptionHandler and allows other jobs to complete normally.
+
+// coroutineScope 
+// Regular Exception in launch scope - stops current job
+I/System.out: *** 1st job launch started...
+I/System.out: *** fetchData 1 started...
+I/System.out: *** fetchData 1 finished.
+I/System.out: *** 1st job launch completed. kotlinx.coroutines.JobCancellationException: Parent job is Cancelling; job=ScopeCoroutine{Cancelling}@ddcc027
+I/System.out: *** 2nd job launch completed. java.lang.Exception: fetchData scope exception
+I/System.out: *** coroutineScope regular exception java.lang.Exception: fetchData scope exception. <-- exception is propagated to parent try/catch
+// NOTE: "1st job" never finishes, it is cancelled with a JobCancellationException
+
+// supervisorScope
+// Regular Exception in launch scope - stops current job
+I/System.out: *** 1st job launch started...
+I/System.out: *** fetchData 1 started...
+I/System.out: *** fetchData 1 finished.
+I/System.out: *** CoroutineExceptionHandler got java.lang.Exception: fetchData scope exception <-- uses the Exception Handler
+I/System.out: *** 2nd job launch completed. java.lang.Exception: fetchData scope exception
+I/System.out: *** 1st job launch finished.
+I/System.out: *** 1st job launch completed. null
+// NOTE: "1st job" completes normally.
+
+// coroutineScope or supervisorScope
+// CancellationException in launch scope - stops current job, otherwise silent.
+I/System.out: *** 1st job launch started...
+I/System.out: *** fetchData 1 started...
+I/System.out: *** fetchData 1 finished.
+I/System.out: *** 2nd job launch completed. java.util.concurrent.CancellationException: fetchData scope exception
+I/System.out: *** 1st job launch finished.
+I/System.out: *** 1st job launch completed. null
+// NOTE: "1st job" completes normally.
+
+--------------- using cancel()
+
+// cancel(); yield() anywhere simply cancels the current scope. Does not affect outside scope.
+
+// coroutineScope or supervisorScope
+// cancel(); yield() // in fetchData (lambda)
+I/System.out: *** 1st job launch started...
+I/System.out: *** 2nd job launch started...
+I/System.out: *** 2nd job fetchData 1 started...
+I/System.out: *** fetchDataRethrowCancellation CancellationException rethrown kotlinx.coroutines.JobCancellationException: StandaloneCoroutine was cancelled; job=StandaloneCoroutine{Cancelling}@ddcc027
+I/System.out: *** 2nd job launch completed. kotlinx.coroutines.JobCancellationException: StandaloneCoroutine was cancelled; job=StandaloneCoroutine{Cancelled}@ddcc027
+I/System.out: *** 1st job launch finished.
+I/System.out: *** 1st job launch completed. null
+
+// coroutineScope or supervisorScope
+// cancel(); yield() // in launch scope
+I/System.out: *** 1st job launch started...
+I/System.out: *** fetchData 1 started...
+I/System.out: *** fetchData 1 finished.
+I/System.out: *** 2nd job launch completed. kotlinx.coroutines.JobCancellationException: StandaloneCoroutine was cancelled; job=StandaloneCoroutine{Cancelled}@ddcc027
+I/System.out: *** 1st job launch finished.
+I/System.out: *** 1st job launch completed. null
+
+
+----------------- Parent ViewModelScope Cancels
+
+All child coroutines and jobs are cancelled.
+
+// coroutineScope or supervisorScope
+I/System.out: ------------------------- INIT VIEWMODEL
+I/System.out: *** 1st job launch started...
+I/System.out: *** 2nd job launch started...
+I/System.out: *** 2nd job fetchData 1 started...
+I/System.out: ------------------------- RELAUNCHING VIEWMODEL
+I/System.out: *** 1st job launch completed. kotlinx.coroutines.JobCancellationException: Job was cancelled; job=SupervisorJobImpl{Cancelling}@eb3e2d4
+I/System.out: *** fetchDataRethrowCancellation CancellationException rethrown kotlinx.coroutines.JobCancellationException: Job was cancelled; job=SupervisorJobImpl{Cancelling}@eb3e2d4
+I/System.out: *** 2nd job launch completed. kotlinx.coroutines.JobCancellationException: Job was cancelled; job=SupervisorJobImpl{Cancelling}@eb3e2d4
+I/System.out: *** coroutineScope/supervisorScope CancellationException kotlinx.coroutines.JobCancellationException: Job was cancelled; job=SupervisorJobImpl{Cancelling}@eb3e2d4
+I/System.out: ------------------------- INIT VIEWMODEL
+I/System.out: *** 1st job launch started...
+I/System.out: *** 2nd job launch started...
+I/System.out: *** 2nd job fetchData 1 started...
+I/System.out: *** 1st job launch finished.
+I/System.out: *** 1st job launch completed. null
+I/System.out: *** 2nd job fetchData 1 finished.
+I/System.out: *** 2nd job fetchData 2 started...
+I/System.out: *** 2nd job fetchData 2 finished
+I/System.out: *** 2nd job launch completed. null
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
